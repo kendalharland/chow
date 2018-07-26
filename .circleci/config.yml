@@ -1,0 +1,19 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/golang:1.9
+      - image: circleci/golang:1.10
+
+    working_directory: /go/src/go.kendal.io/chow
+    steps:
+      - checkout
+      - run: go get -v -t -d ./...
+      - run: 
+          name: Run tests
+          command: go test -v -coverprofile=coverage.txt -covermode=atomic go.kendal.io/chow
+          environment:
+            CI: true
+      - run:
+          name: Upload coverage
+          command: bash <(curl -s https://codecov.io/bash)
