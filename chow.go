@@ -1,6 +1,9 @@
 package chow
 
 import (
+	"fmt"
+	"io"
+	"io/ioutil"
 	"os"
 )
 
@@ -75,6 +78,26 @@ type StepLog struct {
 	StepName   string     `json:"step_name"`
 	Step       Step       `json:"step"`
 	StepResult StepResult `json:"result"`
+}
+
+func Placeholder(contents string) string {
+	if placeholders == nil {
+		placeholders = make(map[string]io.WriteCloser)
+	}
+
+	id := fmt.Sprintf("%d", len(placeholders))
+	tempFile, err := ioutil.TempFile("", id)
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = tempFile.Write([]byte(contents))
+	if err != nil {
+		panic(err)
+	}
+
+	placeholders[id] = tempFile
+	return "//ph/" + id
 }
 
 // SelfProvider adapts a Step as a StepProvider.

@@ -7,11 +7,19 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"syscall"
 )
 
-// The currently executing step.
-var currentStep Step
+type logLevel string
+
+var placeholders map[string]io.WriteCloser
+
+const (
+	fatal logLevel = "FATAL"
+	warn           = "WARNING"
+)
 
 func runRunnable(r Runnable, stdout io.Writer, stderr io.Writer) (err error) {
 	// The framework will panic if any fatal errors occur. Recover from these panics so we
@@ -25,38 +33,40 @@ func runRunnable(r Runnable, stdout io.Writer, stderr io.Writer) (err error) {
 	// Set the CWD as the directory in which execution started.
 	startDir, err := os.Getwd()
 	if err != nil {
-		logFatal("failed to get working directory", err)
+		logFatal("failed to get working directory", err, Step{})
 	}
 
-	// Run the program.
 	runner := &prodRunner{
 		startDir: startDir,
 		stdout:   stdout,
 		stderr:   stderr,
 		stepLog:  &JSONStepLogWriter{os.Stderr},
 	}
+
+	// Run the program.
 	r(runner)
 	return
 }
 
 type prodRunner struct {
-	startDir string
-	stdout   io.Writer
-	stderr   io.Writer
-	stepLog  StepLogWriter
+	currentStep Step
+	startDir    string
+	stdout      io.Writer
+	stderr      io.Writer
+	stepLog     StepLogWriter
 }
 
 // Run implements Runner
 func (r *prodRunner) Run(name string, provider StepProvider) StepResult {
-	currentStep = provider.Create()
-	if err := r.convertAnyPaths(currentStep.Command); err != nil {
-		logFatal("failed to convert paths in step command", err)
+	r.currentStep = provider.Create()
+	if err := r.convertAnyPaths(r.currentStep.Command); err != nil {
+		logFatal("failed to convert paths in step command", err, r.currentStep)
 	}
-	if err := r.convertAnyPaths(currentStep.Outputs); err != nil {
-		logFatal("failed to convert paths in step outputs", err)
+	if err := r.convertAnyPaths(r.currentStep.Outputs); err != nil {
+		logFatal("failed to convert paths in step outputs", err, r.currentStep)
 	}
 
-	child := exec.Command(currentStep.Command[0], currentStep.Command[1:]...)
+	child := exec.Command(r.currentStep.Command[0], r.currentStep.Command[1:]...)
 
 	// Capture stdout & stderr.  We still want to print the child's output for easy
 	// debugging, so we also stream to the current stdout and stderr.
@@ -68,7 +78,7 @@ func (r *prodRunner) Run(name string, provider StepProvider) StepResult {
 
 	// Start the child process
 	if err := child.Start(); err != nil {
-		logFatal("failed to start child process", err)
+		logFatal("failed to start child process", err, r.currentStep)
 	}
 
 	// Get the exit code.
@@ -79,7 +89,7 @@ func (r *prodRunner) Run(name string, provider StepProvider) StepResult {
 
 	// Validate outputs.
 	var missingOutputs Outputs
-	for _, output := range currentStep.Outputs {
+	for _, output := range r.currentStep.Outputs {
 		_, err := os.Stat(output)
 		if err != nil && os.IsNotExist(err) {
 			missingOutputs = append(missingOutputs, output)
@@ -88,7 +98,7 @@ func (r *prodRunner) Run(name string, provider StepProvider) StepResult {
 	if len(missingOutputs) > 0 {
 		// Unsafe to continue execution. Abort.
 		err := fmt.Errorf("ouputs are missing: %#v", missingOutputs)
-		logFatal("declared outputs missing after step execution", err)
+		logFatal("declared outputs missing after step execution", err, r.currentStep)
 	}
 
 	result := StepResult{
@@ -98,11 +108,62 @@ func (r *prodRunner) Run(name string, provider StepProvider) StepResult {
 	}
 
 	// Report the step
-	if err := r.stepLog.Write(StepLog{name, currentStep, result}); err != nil {
-		logFatal("failed to log step", err)
+	if err := r.stepLog.Write(StepLog{name, r.currentStep, result}); err != nil {
+		logFatal("failed to log step", err, r.currentStep)
 	}
 
 	return result
+}
+
+// Converts the input path to an absolute path for the current platform.
+//
+// The path is expected to have a Unix-style syntax, using '/' as the path separator.  The
+// caller may refer to the "root" of the current task using '//', and the current working
+// directory as './'.
+func (r *prodRunner) convertAnyPaths(paths []string) error {
+	for i, p := range paths {
+		// Current working directory
+		if strings.HasPrefix(p, "//CWD/") {
+			wd, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("failed to get cwd: %v", err)
+			}
+
+			suffix := strings.SplitN(p, "//CWD/", 2)[1]
+			paths[i] = filepath.FromSlash(wd + "/" + suffix)
+			continue
+		}
+
+		// Placeholder
+		if strings.HasPrefix(p, "//ph/") {
+			id := strings.SplitN(p, "//ph/", 2)[1]
+			file := placeholders[id]
+			// TODO: Find a way to close the file handle.
+			paths[i] = file.(*os.File).Name()
+			continue
+		}
+
+		// Start dir
+		// TODO: Make this 3 slashes.
+		if strings.HasPrefix(p, "//") {
+			suffix := strings.SplitN(p, "//", 2)[1]
+			r.startDir = strings.TrimRight(r.startDir, "/")
+			paths[i] = filepath.FromSlash(r.startDir + "/" + suffix)
+			continue
+		}
+
+		// Arbitrary absolute path
+		// TODO: Remove this warning, since a forward slash does not always indicate a
+		// path.
+		if strings.HasPrefix(p, "/") {
+			logWarning("unsafe use of absolute path "+p, r.currentStep)
+			paths[i] = filepath.FromSlash(p)
+			continue
+		}
+		// Ignore relative paths and non-path arguments
+	}
+
+	return nil
 }
 
 // A Runner that processes step invocations in tests.
@@ -154,11 +215,15 @@ func (r *testRunner) Run(name string, provider StepProvider) StepResult {
 	// Report the step
 	step := provider.Create()
 	if err := r.stepLog.Write(StepLog{name, step, stepResult}); err != nil {
-		logFatal("failed to log step", err)
+		logFatal("failed to log step", err, step)
 	}
 
 	// Return the empty result.
 	return stepResult
+}
+
+func (*testRunner) registerPlaceholder(content string) string {
+	return "[placeholder]"
 }
 
 // Internal utiltity types

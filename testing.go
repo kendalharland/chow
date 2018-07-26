@@ -60,16 +60,6 @@ type TestCase struct {
 	Output io.Writer
 }
 
-// Tester is a test-harness used to run tests.
-// Default Tester implementation.
-type Tester struct {
-	// Function under test.
-	runnable Runnable
-
-	// Where test output is written. Visible for internal testing only.
-	output io.Writer
-}
-
 // TODO: Fix panics in this function.
 func CreateExpectationFile(t *testing.T) *os.File {
 	// Generate test directory if it doesn't exist.

@@ -51,10 +51,12 @@ func TestProdRunner_Run(t *testing.T) {
 
 	// Test setup.
 	echoPath := buildTestBinary(t, "echo")
+	catPath := buildTestBinary(t, "cat")
 
 	// Test teardown.
 	defer func() {
 		os.RemoveAll(echoPath)
+		os.RemoveAll(catPath)
 	}()
 
 	t.Run("should run a command", func(t *testing.T) {
@@ -67,7 +69,7 @@ func TestProdRunner_Run(t *testing.T) {
 				Command: []string{echoPath, "Hello, World!"},
 			},
 			StepResult: StepResult{
-				Stdout: "Hello, World!\n",
+				Stdout: "Hello, World!",
 			},
 		}
 
@@ -87,12 +89,11 @@ func TestProdRunner_Run(t *testing.T) {
 				Command: []string{echoPath, expectedPath},
 			},
 			StepResult: StepResult{
-				Stdout: expectedPath + "\n",
+				Stdout: expectedPath,
 			},
 		}
 
 		expectOutput(t, input, output)
-
 	})
 
 	t.Run("should convert path containing cwd in command if cwd == start dir", func(t *testing.T) {
@@ -108,12 +109,33 @@ func TestProdRunner_Run(t *testing.T) {
 				Command: []string{echoPath, expectedPath},
 			},
 			StepResult: StepResult{
-				Stdout: expectedPath + "\n",
+				Stdout: expectedPath,
 			},
 		}
 
 		expectOutput(t, input, output)
 
+	})
+
+	t.Run("should convert placeholders", func(t *testing.T) {
+		placeholder := Placeholder("def")
+		placeholderID := strings.SplitN(placeholder, "//ph/", 2)[1]
+		placeholderBackingFile := placeholders[placeholderID].(*os.File).Name()
+
+		input := &SelfProvider{
+			Command: []string{catPath, placeholder},
+		}
+
+		output := StepLog{
+			Step: Step{
+				Command: []string{catPath, placeholderBackingFile},
+			},
+			StepResult: StepResult{
+				Stdout: "def",
+			},
+		}
+
+		expectOutput(t, input, output)
 	})
 
 	t.Run("should convert path containing cwd in command if cwd != start dir", func(t *testing.T) {
@@ -130,7 +152,7 @@ func TestProdRunner_Run(t *testing.T) {
 				Command: []string{echoPath, filepath.FromSlash("/absolute/path")},
 			},
 			StepResult: StepResult{
-				Stdout: filepath.FromSlash("/absolute/path") + "\n",
+				Stdout: filepath.FromSlash("/absolute/path"),
 			},
 		}
 
@@ -339,19 +361,27 @@ func buildTestBinary(t *testing.T, tool string) string {
 }
 
 func expectLogsEqual(t *testing.T, expected, actual StepLog) {
-	if !reflect.DeepEqual(expected, actual) {
-		msg := new(bytes.Buffer)
-
-		fmt.Fprintln(msg, "actual output differs from expected at:")
+	if !stepLogsEqual(expected, actual) {
+		b := new(bytes.Buffer)
 		diffs := pretty.Diff(expected, actual)
+
+		fmt.Fprintln(b, "actual output differs from expected at:")
 		for _, diff := range diffs {
-			fmt.Fprintf(msg, "- %s\n", diff)
+			fmt.Fprintf(b, "-%s\n", diff)
 		}
-		fmt.Fprintf(msg, "expected: %v\n actual: %v",
+		fmt.Fprintf(b, "expected: %v\nactual: %v",
 			pretty.Sprint(expected), pretty.Sprint(actual))
 
-		t.Errorf(msg.String())
+		t.Errorf(b.String())
 	}
+}
+
+func stepLogsEqual(a, b StepLog) bool {
+	return a.StepName == b.StepName &&
+		reflect.DeepEqual(a.Step, b.Step) &&
+		strings.TrimSpace(a.StepResult.Stdout) == strings.TrimSpace(a.StepResult.Stdout) &&
+		strings.TrimSpace(a.StepResult.Stderr) == strings.TrimSpace(b.StepResult.Stderr) &&
+		a.StepResult.ExitCode == b.StepResult.ExitCode
 }
 
 type MemoryLogWriter struct {
