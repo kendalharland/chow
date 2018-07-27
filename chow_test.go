@@ -18,7 +18,7 @@ import (
 func TestProdRunner_Run(t *testing.T) {
 	// Expects that executing the given step produces the given step log.  Results in a
 	// test failure if the actual log differs.
-	expectOutput := func(t *testing.T, provider StepProvider, expected StepLog) {
+	expectOutput := func(t *testing.T, step Step, expected StepLog) {
 		stderr := new(bytes.Buffer)
 		startDir, _ := os.Getwd()
 
@@ -30,7 +30,7 @@ func TestProdRunner_Run(t *testing.T) {
 			stderr:   stderr,
 			stepLog:  logs,
 		}
-		runner.Run("", provider)
+		runner.Run("", step)
 
 		// Verify step log is correct.
 		actual := logs.Entries[0]
@@ -39,10 +39,10 @@ func TestProdRunner_Run(t *testing.T) {
 
 	// Expects that running the given steps produces an error. Results in a test failure
 	// if no error is produced.
-	expectError := func(t *testing.T, providers []StepProvider) {
+	expectError := func(t *testing.T, steps []Step) {
 		if runRunnable(func(r Runner) {
-			for _, p := range providers {
-				r.Run("", p)
+			for _, step := range steps {
+				r.Run("", step)
 			}
 		}, os.Stdout, os.Stderr) == nil {
 			t.Fatalf("expected an error. got nil")
@@ -60,7 +60,7 @@ func TestProdRunner_Run(t *testing.T) {
 	}()
 
 	t.Run("should run a command", func(t *testing.T) {
-		input := &SelfProvider{
+		input := Step{
 			Command: []string{echoPath, "Hello, World!"},
 		}
 
@@ -80,7 +80,7 @@ func TestProdRunner_Run(t *testing.T) {
 		startDir, _ := os.Getwd()
 		expectedPath := filepath.FromSlash(startDir + "/path/to/file")
 
-		input := &SelfProvider{
+		input := Step{
 			Command: []string{echoPath, "//path/to/file"},
 		}
 
@@ -100,7 +100,7 @@ func TestProdRunner_Run(t *testing.T) {
 		cwd, _ := os.Getwd()
 		expectedPath := filepath.FromSlash(cwd + "/path/to/file")
 
-		input := &SelfProvider{
+		input := Step{
 			Command: []string{echoPath, "//CWD/path/to/file"},
 		}
 
@@ -122,7 +122,7 @@ func TestProdRunner_Run(t *testing.T) {
 		placeholderID := strings.SplitN(placeholder, "//ph/", 2)[1]
 		placeholderBackingFile := placeholders[placeholderID].(*os.File).Name()
 
-		input := &SelfProvider{
+		input := Step{
 			Command: []string{catPath, placeholder},
 		}
 
@@ -143,7 +143,7 @@ func TestProdRunner_Run(t *testing.T) {
 	})
 
 	t.Run("should not convert absolute path in command", func(t *testing.T) {
-		input := &SelfProvider{
+		input := Step{
 			Command: []string{echoPath, "/absolute/path"},
 		}
 
@@ -162,14 +162,14 @@ func TestProdRunner_Run(t *testing.T) {
 	// TODO: Add tests for path conversion in outputs.
 
 	t.Run("should error if a command fails to produce outputs", func(t *testing.T) {
-		expectError(t, []StepProvider{&SelfProvider{
+		expectError(t, []Step{{
 			Command: []string{echoPath},
 			Outputs: []string{"missing.txt"},
 		}})
 	})
 
 	t.Run("should error if a binary does not exist", func(t *testing.T) {
-		expectError(t, []StepProvider{&SelfProvider{
+		expectError(t, []Step{{
 			Command: []string{"i_dont_exist"},
 		}})
 	})
@@ -179,12 +179,12 @@ func TestProdRunner_Run(t *testing.T) {
 func TestTestRunner_Run(t *testing.T) {
 	// Expects that executing the given steps w/ the given mocks produces the given step
 	// log.  Results in a test failure if the actual log differs.
-	expectOutput := func(t *testing.T, providers []StepProvider, mocks []Mock, expected []StepLog) {
+	expectOutput := func(t *testing.T, step []Step, mocks []Mock, expected []StepLog) {
 		// Execute the program.
 		output := &MemoryLogWriter{}
 		runner := &testRunner{Mocks: mocks, stepLog: output}
-		for i := range providers {
-			runner.Run("step_"+fmt.Sprint(i), providers[i])
+		for i := range step {
+			runner.Run("step_"+fmt.Sprint(i), step[i])
 		}
 
 		// Verify the results.
@@ -200,8 +200,8 @@ func TestTestRunner_Run(t *testing.T) {
 
 	t.Run("step output should be mocked", func(t *testing.T) {
 		t.Run("when a mock step name matches", func(t *testing.T) {
-			provider := &SelfProvider{Command: []string{"command"}}
-			inputs := []StepProvider{provider, provider, provider}
+			step := Step{Command: []string{"command"}}
+			inputs := []Step{step, step, step}
 
 			mocks := []Mock{{
 				Step: "step_1",
@@ -214,11 +214,11 @@ func TestTestRunner_Run(t *testing.T) {
 
 			result := []StepLog{{
 				StepName:   "step_0",
-				Step:       provider.Create(),
+				Step:       step,
 				StepResult: StepResult{},
 			}, {
 				StepName: "step_1",
-				Step:     provider.Create(),
+				Step:     step,
 				StepResult: StepResult{
 					Stdout:   "mocked stdout",
 					Stderr:   "mocked stderr",
@@ -226,7 +226,7 @@ func TestTestRunner_Run(t *testing.T) {
 				},
 			}, {
 				StepName:   "step_2",
-				Step:       provider.Create(),
+				Step:       step,
 				StepResult: StepResult{},
 			}}
 
@@ -236,27 +236,27 @@ func TestTestRunner_Run(t *testing.T) {
 
 	t.Run("step output should be empty", func(t *testing.T) {
 		t.Run("when there are no mocks", func(t *testing.T) {
-			inputs := []StepProvider{&SelfProvider{
+			inputs := []Step{{
 				Command: []string{"command", "arg1", "arg2"},
 				Outputs: []string{"output"},
 			}}
 
 			result := []StepLog{{
 				StepName: "step_0",
-				Step:     inputs[0].Create(),
+				Step:     inputs[0],
 			}}
 
 			expectOutput(t, inputs, []Mock{}, result)
 		})
 		t.Run("when a mock step name does not match", func(t *testing.T) {
-			inputs := []StepProvider{&SelfProvider{
+			inputs := []Step{{
 				Command: []string{"command", "arg1", "arg2"},
 				Outputs: []string{"output"},
 			}}
 
 			result := []StepLog{{
 				StepName: "step_0",
-				Step:     inputs[0].Create(),
+				Step:     inputs[0],
 			}}
 
 			expectOutput(t, inputs, []Mock{}, result)
@@ -295,7 +295,7 @@ func TestJSONStepWriter(t *testing.T) {
 func TestTestWorkflow(t *testing.T) {
 	cfg := TestConfig{
 		Runnable: func(r Runner) {
-			r.Run("echo", &SelfProvider{Command: []string{"echo"}})
+			r.Run("echo", Step{Command: []string{"echo"}})
 		},
 		Flags: nil,
 	}
