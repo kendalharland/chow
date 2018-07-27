@@ -17,8 +17,8 @@ func init() {
 	}
 }
 
-func Echo(text string) chow.StepProvider {
-	return &chow.SelfProvider{
+func Echo(text string) chow.Step {
+	return chow.Step{
 		Command: []string{"test_programs/bin/echo" + suffix, text},
 	}
 }

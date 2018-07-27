@@ -29,18 +29,11 @@ func Main(r Runnable) error {
 //     fmt.Println("Stderr:", result.Stderr)
 //     fmt.Println("Exit code:", result.ExitCode)
 type Runner interface {
-	Run(stepName string, s StepProvider) StepResult
+	Run(stepName string, s Step) StepResult
 }
 
 // Runnable is the client application. This should be passed to Main().
 type Runnable func(Runner)
-
-// StepProvider generates Steps.
-//
-// StepProviders are passed to Runner.Run to execute shell commands.
-type StepProvider interface {
-	Create() Step
-}
 
 // Step describes what what will happen in a step invocation.
 //
@@ -98,23 +91,4 @@ func Placeholder(contents string) string {
 
 	placeholders[id] = tempFile
 	return "//ph/" + id
-}
-
-// SelfProvider adapts a Step as a StepProvider.
-type SelfProvider Step
-
-func (s *SelfProvider) Create() Step {
-	return Step(*s)
-}
-
-// NoArgProvider adapts the name of a shell command as a StepProvider.
-//
-// Example Usage:
-//
-//    cmd := NoArgProvider('true')
-//    runner.Run(cmd)
-type NoArgProvider string
-
-func (c NoArgProvider) Create() Step {
-	return Step{Command: []string{string(c)}}
 }
