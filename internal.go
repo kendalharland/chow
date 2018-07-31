@@ -21,6 +21,16 @@ const (
 	warn           = "WARNING"
 )
 
+// stepLog is a log-entry for a step invocation.
+//
+// This is logged to the console in production and serialized into an expectation file
+// during tests.
+type stepLog struct {
+	StepName   string     `json:"step_name"`
+	Step       Step       `json:"step"`
+	StepResult StepResult `json:"result"`
+}
+
 func runRunnable(r Runnable, stdout io.Writer, stderr io.Writer) (err error) {
 	// The framework will panic if any fatal errors occur. Recover from these panics so we
 	// can report errors gracefully.
@@ -108,7 +118,7 @@ func (r *prodRunner) Run(name string, step Step) StepResult {
 	}
 
 	// Report the step
-	if err := r.stepLog.Write(StepLog{name, r.currentStep, result}); err != nil {
+	if err := r.stepLog.Write(stepLog{name, r.currentStep, result}); err != nil {
 		logFatal("failed to log step", err, r.currentStep)
 	}
 
@@ -212,7 +222,7 @@ func (r *testRunner) Run(name string, step Step) StepResult {
 	}
 
 	// Report the step
-	if err := r.stepLog.Write(StepLog{name, step, stepResult}); err != nil {
+	if err := r.stepLog.Write(stepLog{name, step, stepResult}); err != nil {
 		logFatal("failed to log step", err, step)
 	}
 
@@ -243,14 +253,14 @@ func (w *recordingWriter) String() string {
 }
 
 type StepLogWriter interface {
-	Write(StepLog) error
+	Write(stepLog) error
 }
 
 type JSONStepLogWriter struct {
 	delegate io.Writer
 }
 
-func (w *JSONStepLogWriter) Write(s StepLog) error {
+func (w *JSONStepLogWriter) Write(s stepLog) error {
 	bytes, err := json.MarshalIndent(s, "", "    ")
 	if err != nil {
 		return err

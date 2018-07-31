@@ -18,7 +18,7 @@ import (
 func TestProdRunner_Run(t *testing.T) {
 	// Expects that executing the given step produces the given step log.  Results in a
 	// test failure if the actual log differs.
-	expectOutput := func(t *testing.T, step Step, expected StepLog) {
+	expectOutput := func(t *testing.T, step Step, expected stepLog) {
 		stderr := new(bytes.Buffer)
 		startDir, _ := os.Getwd()
 
@@ -64,7 +64,7 @@ func TestProdRunner_Run(t *testing.T) {
 			Command: []string{echoPath, "Hello, World!"},
 		}
 
-		output := StepLog{
+		output := stepLog{
 			Step: Step{
 				Command: []string{echoPath, "Hello, World!"},
 			},
@@ -84,7 +84,7 @@ func TestProdRunner_Run(t *testing.T) {
 			Command: []string{echoPath, "//path/to/file"},
 		}
 
-		output := StepLog{
+		output := stepLog{
 			Step: Step{
 				Command: []string{echoPath, expectedPath},
 			},
@@ -104,7 +104,7 @@ func TestProdRunner_Run(t *testing.T) {
 			Command: []string{echoPath, "//CWD/path/to/file"},
 		}
 
-		output := StepLog{
+		output := stepLog{
 			Step: Step{
 				Command: []string{echoPath, expectedPath},
 			},
@@ -126,7 +126,7 @@ func TestProdRunner_Run(t *testing.T) {
 			Command: []string{catPath, placeholder},
 		}
 
-		output := StepLog{
+		output := stepLog{
 			Step: Step{
 				Command: []string{catPath, placeholderBackingFile},
 			},
@@ -147,7 +147,7 @@ func TestProdRunner_Run(t *testing.T) {
 			Command: []string{echoPath, "/absolute/path"},
 		}
 
-		output := StepLog{
+		output := stepLog{
 			Step: Step{
 				Command: []string{echoPath, filepath.FromSlash("/absolute/path")},
 			},
@@ -179,7 +179,7 @@ func TestProdRunner_Run(t *testing.T) {
 func TestTestRunner_Run(t *testing.T) {
 	// Expects that executing the given steps w/ the given mocks produces the given step
 	// log.  Results in a test failure if the actual log differs.
-	expectOutput := func(t *testing.T, step []Step, mocks []Mock, expected []StepLog) {
+	expectOutput := func(t *testing.T, step []Step, mocks []Mock, expected []stepLog) {
 		// Execute the program.
 		output := &MemoryLogWriter{}
 		runner := &testRunner{Mocks: mocks, stepLog: output}
@@ -212,7 +212,7 @@ func TestTestRunner_Run(t *testing.T) {
 				},
 			}}
 
-			result := []StepLog{{
+			result := []stepLog{{
 				StepName:   "step_0",
 				Step:       step,
 				StepResult: StepResult{},
@@ -241,7 +241,7 @@ func TestTestRunner_Run(t *testing.T) {
 				Outputs: []string{"output"},
 			}}
 
-			result := []StepLog{{
+			result := []stepLog{{
 				StepName: "step_0",
 				Step:     inputs[0],
 			}}
@@ -254,7 +254,7 @@ func TestTestRunner_Run(t *testing.T) {
 				Outputs: []string{"output"},
 			}}
 
-			result := []StepLog{{
+			result := []stepLog{{
 				StepName: "step_0",
 				Step:     inputs[0],
 			}}
@@ -271,7 +271,7 @@ func TestJSONStepWriter(t *testing.T) {
 	buffer := new(bytes.Buffer)
 	w := &JSONStepLogWriter{buffer}
 
-	input := StepLog{
+	input := stepLog{
 		Step: Step{
 			Command: []string{"a"},
 			Outputs: []string{"b"},
@@ -284,7 +284,7 @@ func TestJSONStepWriter(t *testing.T) {
 	}
 
 	w.Write(input)
-	var output StepLog
+	var output stepLog
 	if err := json.Unmarshal(buffer.Bytes(), &output); err != nil {
 		t.Fatal(err)
 	}
@@ -302,13 +302,13 @@ func TestTestWorkflow(t *testing.T) {
 
 	t.Run("default", func(t *testing.T) {
 		var buf bytes.Buffer
-		cfg.Run(TestCase{
+		cfg.Run(t, TestCase{
 			Name:   t.Name(),
 			Output: &buf,
 		})
 
 		expectedLog, _ := json.MarshalIndent(
-			StepLog{
+			stepLog{
 				StepName: "echo",
 				Step: Step{
 					Command: []string{"echo"},
@@ -332,7 +332,7 @@ func TestCreateExpectationFile(t *testing.T) {
 	t.Run("nested", func(t *testing.T) {
 		cwd, _ := os.Getwd()
 		expected := filepath.FromSlash(cwd + "/expectations/TestCreateExpectationFile.nested.expected.json")
-		file := CreateExpectationFile(t)
+		file := createExpectationFile(t)
 		if file.Name() != expected {
 			t.Fatalf("expected path %s\nbut got %s\n", file.Name(), expected)
 		}
@@ -360,7 +360,7 @@ func buildTestBinary(t *testing.T, tool string) string {
 	return path
 }
 
-func expectLogsEqual(t *testing.T, expected, actual StepLog) {
+func expectLogsEqual(t *testing.T, expected, actual stepLog) {
 	if !stepLogsEqual(expected, actual) {
 		b := new(bytes.Buffer)
 		diffs := pretty.Diff(expected, actual)
@@ -376,7 +376,7 @@ func expectLogsEqual(t *testing.T, expected, actual StepLog) {
 	}
 }
 
-func stepLogsEqual(a, b StepLog) bool {
+func stepLogsEqual(a, b stepLog) bool {
 	return a.StepName == b.StepName &&
 		reflect.DeepEqual(a.Step, b.Step) &&
 		strings.TrimSpace(a.StepResult.Stdout) == strings.TrimSpace(a.StepResult.Stdout) &&
@@ -385,10 +385,10 @@ func stepLogsEqual(a, b StepLog) bool {
 }
 
 type MemoryLogWriter struct {
-	Entries []StepLog
+	Entries []stepLog
 }
 
-func (w *MemoryLogWriter) Write(s StepLog) error {
+func (w *MemoryLogWriter) Write(s stepLog) error {
 	w.Entries = append(w.Entries, s)
 	return nil
 }

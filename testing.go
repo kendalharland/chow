@@ -36,12 +36,12 @@ type TestConfig struct {
 }
 
 // TODO: Define better logging functions and use those instead of these panics.
-func (c *TestConfig) Run(tc TestCase) {
-	if tc.Name == "" {
-		panic(errors.New("name cannot be empty"))
+func (c *TestConfig) Run(t *testing.T, tc TestCase) {
+	if t.Name() == "" {
+		panic(errors.New("test case name cannot be empty"))
 	}
 	if tc.Output == nil {
-		panic(errors.New("test output writer cannot be nil"))
+		tc.Output = createExpectationFile(t)
 	}
 
 	runner := &testRunner{
@@ -61,7 +61,7 @@ type TestCase struct {
 }
 
 // TODO: Fix panics in this function.
-func CreateExpectationFile(t *testing.T) *os.File {
+func createExpectationFile(t *testing.T) *os.File {
 	// Generate test directory if it doesn't exist.
 	cwd, err := os.Getwd()
 	if err != nil {
