@@ -301,7 +301,7 @@ func expectLogsEqual(t *testing.T, expected, actual stepLog) {
 func stepLogsEqual(a, b stepLog) bool {
 	return a.StepName == b.StepName &&
 		reflect.DeepEqual(a.Step, b.Step) &&
-		strings.TrimSpace(a.StepResult.Stdout) == strings.TrimSpace(a.StepResult.Stdout) &&
+		strings.TrimSpace(a.StepResult.Stdout) == strings.TrimSpace(b.StepResult.Stdout) &&
 		strings.TrimSpace(a.StepResult.Stderr) == strings.TrimSpace(b.StepResult.Stderr) &&
 		a.StepResult.ExitCode == b.StepResult.ExitCode
 }
