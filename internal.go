@@ -50,7 +50,6 @@ func runRunnable(r Runnable, stdout io.Writer, stderr io.Writer) (err error) {
 		startDir: startDir,
 		stdout:   stdout,
 		stderr:   stderr,
-		stepLog:  &JSONStepLogWriter{os.Stderr},
 	}
 
 	// Run the program.
@@ -63,12 +62,13 @@ type prodRunner struct {
 	startDir    string
 	stdout      io.Writer
 	stderr      io.Writer
-	stepLog     StepLogWriter
+	stepOutput  io.Writer
 }
 
 // Run implements Runner
 func (r *prodRunner) Run(name string, step Step) StepResult {
 	r.currentStep = step
+
 	if err := r.convertAnyPaths(r.currentStep.Command); err != nil {
 		logFatal("failed to convert paths in step command", err, r.currentStep)
 	}
@@ -78,11 +78,10 @@ func (r *prodRunner) Run(name string, step Step) StepResult {
 
 	child := exec.Command(r.currentStep.Command[0], r.currentStep.Command[1:]...)
 
-	// Capture stdout & stderr.  We still want to print the child's output for easy
+	// Capture stdout & stderr. We still want to print the child's output for easy
 	// debugging, so we also stream to the current stdout and stderr.
 	outWriter := &recordingWriter{Delegate: r.stdout}
 	errWriter := &recordingWriter{Delegate: r.stderr}
-
 	child.Stdout = outWriter
 	child.Stderr = errWriter
 
@@ -98,31 +97,37 @@ func (r *prodRunner) Run(name string, step Step) StepResult {
 	}
 
 	// Validate outputs.
-	var missingOutputs Outputs
+	var missingOutputs []string
 	for _, output := range r.currentStep.Outputs {
 		_, err := os.Stat(output)
 		if err != nil && os.IsNotExist(err) {
 			missingOutputs = append(missingOutputs, output)
 		}
 	}
+
 	if len(missingOutputs) > 0 {
-		// Unsafe to continue execution. Abort.
 		err := fmt.Errorf("ouputs are missing: %#v", missingOutputs)
 		logFatal("declared outputs missing after step execution", err, r.currentStep)
 	}
 
-	result := StepResult{
-		Stdout:   outWriter.String(),
-		Stderr:   errWriter.String(),
-		ExitCode: exitCode,
+	// Report the result
+	stepLog := stepLog{
+		StepName: name,
+		Step:     r.currentStep,
+		StepResult: StepResult{
+			Stdout:   outWriter.String(),
+			Stderr:   errWriter.String(),
+			ExitCode: exitCode,
+		},
 	}
 
-	// Report the step
-	if err := r.stepLog.Write(stepLog{name, r.currentStep, result}); err != nil {
+	encoder := json.NewEncoder(r.stepOutput)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(stepLog); err != nil {
 		logFatal("failed to log step", err, r.currentStep)
 	}
 
-	return result
+	return stepLog.StepResult
 }
 
 // Converts the input path to an absolute path for the current platform.
@@ -173,7 +178,7 @@ type testRunner struct {
 	// A list of functions that return Mock objects for certain step invocations.
 	Mocks      []Mock
 	callCounts map[string]int
-	stepLog    StepLogWriter
+	stepLogs   []stepLog
 }
 
 // Run implements Runner
@@ -194,26 +199,16 @@ func (r *testRunner) Run(name string, step Step) StepResult {
 	// registered multiple mocks in their test; In this case, the first one registered
 	// wins because we search the list of mocks from 0...end.
 	var stepResult StepResult
-	matched := -1
 	for i, mock := range r.Mocks {
 		if mock.Step == name {
 			stepResult = mock.Result
-			matched = i
+			// Prevent the mock from matching other steps by removing it.
+			r.Mocks = append(r.Mocks[:i], r.Mocks[i+1:]...)
 			break
 		}
 	}
 
-	// Prevent the mock from matching other steps by removing it.
-	if matched >= 0 {
-		r.Mocks = append(r.Mocks[:matched], r.Mocks[matched+1:]...)
-	}
-
-	// Report the step
-	if err := r.stepLog.Write(stepLog{name, step, stepResult}); err != nil {
-		logFatal("failed to log step", err, step)
-	}
-
-	// Return the empty result.
+	r.stepLogs = append(r.stepLogs, stepLog{name, step, stepResult})
 	return stepResult
 }
 
@@ -241,17 +236,4 @@ func (w *recordingWriter) String() string {
 
 type StepLogWriter interface {
 	Write(stepLog) error
-}
-
-type JSONStepLogWriter struct {
-	delegate io.Writer
-}
-
-func (w *JSONStepLogWriter) Write(s stepLog) error {
-	bytes, err := json.MarshalIndent(s, "", "    ")
-	if err != nil {
-		return err
-	}
-	fmt.Fprintln(w.delegate, string(bytes))
-	return nil
 }

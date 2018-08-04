@@ -15,6 +15,8 @@ import (
 	"github.com/kr/pretty"
 )
 
+// TODO: Add tests for path conversion in outputs.
+// TODO: Add tests for when there are mutliple matching mocks
 func TestProdRunner_Run(t *testing.T) {
 	// Expects that executing the given step produces the given step log.  Results in a
 	// test failure if the actual log differs.
@@ -23,17 +25,21 @@ func TestProdRunner_Run(t *testing.T) {
 		startDir, _ := os.Getwd()
 
 		// Run the program
-		logs := &MemoryLogWriter{}
+		var stepOutput bytes.Buffer
 		runner := &prodRunner{
-			startDir: startDir,
-			stdout:   os.Stdout,
-			stderr:   stderr,
-			stepLog:  logs,
+			startDir:   startDir,
+			stdout:     os.Stdout,
+			stderr:     stderr,
+			stepOutput: &stepOutput,
 		}
 		runner.Run("", step)
 
-		// Verify step log is correct.
-		actual := logs.Entries[0]
+		// Deserialize step output
+		var actual stepLog
+		if err := json.NewDecoder(&stepOutput).Decode(&actual); err != nil {
+			t.Fatalf("failed to decode step Output: %v: %v", stepOutput, err)
+		}
+
 		expectLogsEqual(t, expected, actual)
 	}
 
@@ -138,10 +144,6 @@ func TestProdRunner_Run(t *testing.T) {
 		expectOutput(t, input, output)
 	})
 
-	t.Run("should convert path containing cwd in command if cwd != start dir", func(t *testing.T) {
-		// TODO: implement
-	})
-
 	t.Run("should not convert absolute path in command", func(t *testing.T) {
 		input := Step{
 			Command: []string{echoPath, "/absolute/path"},
@@ -158,8 +160,6 @@ func TestProdRunner_Run(t *testing.T) {
 
 		expectOutput(t, input, output)
 	})
-
-	// TODO: Add tests for path conversion in outputs.
 
 	t.Run("should error if a command fails to produce outputs", func(t *testing.T) {
 		expectError(t, []Step{{
@@ -181,14 +181,13 @@ func TestTestRunner_Run(t *testing.T) {
 	// log.  Results in a test failure if the actual log differs.
 	expectOutput := func(t *testing.T, step []Step, mocks []Mock, expected []stepLog) {
 		// Execute the program.
-		output := &MemoryLogWriter{}
-		runner := &testRunner{Mocks: mocks, stepLog: output}
+		runner := &testRunner{Mocks: mocks}
 		for i := range step {
 			runner.Run("step_"+fmt.Sprint(i), step[i])
 		}
 
 		// Verify the results.
-		actual := output.Entries
+		actual := runner.stepLogs
 		if len(expected) != len(actual) {
 			t.Fatalf("expected %v Got %v", expected, actual)
 		}
@@ -261,81 +260,6 @@ func TestTestRunner_Run(t *testing.T) {
 
 			expectOutput(t, inputs, []Mock{}, result)
 		})
-	})
-
-	// TODO: Add tests for when there are mutliple matching mocks
-}
-
-func TestJSONStepWriter(t *testing.T) {
-	buffer := new(bytes.Buffer)
-	w := &JSONStepLogWriter{buffer}
-
-	input := stepLog{
-		Step: Step{
-			Command: []string{"a"},
-			Outputs: []string{"b"},
-		},
-		StepResult: StepResult{
-			Stdout:   "c",
-			Stderr:   "d",
-			ExitCode: 3,
-		},
-	}
-
-	w.Write(input)
-	var output stepLog
-	if err := json.Unmarshal(buffer.Bytes(), &output); err != nil {
-		t.Fatal(err)
-	}
-
-	expectLogsEqual(t, input, output)
-}
-
-func TestTestWorkflow(t *testing.T) {
-	cfg := TestConfig{
-		Runnable: func(r Runner) {
-			r.Run("echo", Step{Command: []string{"echo"}})
-		},
-	}
-
-	t.Run("default", func(t *testing.T) {
-		var buf bytes.Buffer
-		cfg.Run(t, TestCase{
-			Name:   t.Name(),
-			Output: &buf,
-		})
-
-		expectedLog, _ := json.MarshalIndent(
-			stepLog{
-				StepName: "echo",
-				Step: Step{
-					Command: []string{"echo"},
-				},
-				StepResult: StepResult{},
-			},
-			"", "    ")
-
-		expected := strings.TrimSpace(string(expectedLog))
-		output := strings.TrimSpace(buf.String())
-
-		if output != expected {
-			t.Fatalf("expected\n%s\nbut got\n%s\n", expected, output)
-		}
-	})
-}
-
-func TestCreateExpectationFile(t *testing.T) {
-	skipCI(t)
-
-	t.Run("nested", func(t *testing.T) {
-		cwd, _ := os.Getwd()
-		expected := filepath.FromSlash(cwd + "/expectations/TestCreateExpectationFile.nested.expected.json")
-		file := createExpectationFile(t)
-		if file.Name() != expected {
-			t.Fatalf("expected path %s\nbut got %s\n", file.Name(), expected)
-		}
-		file.Close()
-		os.RemoveAll(expected)
 	})
 }
 

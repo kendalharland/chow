@@ -1,6 +1,7 @@
 package chow
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -51,22 +52,24 @@ type TestConfig struct {
 	Runnable Runnable
 }
 
-// TODO: Define better logging functions and use those instead of these panics.
+// Run implements Runner.
 func (c *TestConfig) Run(t *testing.T, tc TestCase) {
 	if t.Name() == "" {
 		panic(errors.New("test case name cannot be empty"))
 	}
+
 	if tc.Output == nil {
 		tc.Output = createExpectationFile(t)
 	}
 
-	runner := &testRunner{
-		Mocks:   tc.Mocks,
-		stepLog: &JSONStepLogWriter{tc.Output},
-	}
-
-	// TODO: Set input args.
+	runner := &testRunner{Mocks: tc.Mocks}
 	c.Runnable(runner)
+
+	encoder := json.NewEncoder(tc.Output)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(runner.stepLogs); err != nil {
+		panic(fmt.Errorf("failed to marshal expectation: %v", err))
+	}
 }
 
 // TODO: Fix panics in this function.
@@ -75,7 +78,6 @@ func createExpectationFile(t *testing.T) *os.File {
 	cwd, err := os.Getwd()
 	if err != nil {
 		panic(fmt.Errorf("could not get current directory: %v", err))
-
 	}
 
 	// Generate output directory.

@@ -13,4 +13,7 @@ func RunSteps(r chow.Runner) {
 	r.Run("echo hello_world", chow.Step{
 		Command: []string{"echo", "Hello, World!"},
 	})
+	r.Run("echo hello_world", chow.Step{
+		Command: []string{"echo", "Hello, Again!"},
+	})
 }

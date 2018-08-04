@@ -16,3 +16,5 @@
 
 # Generated test binaries
 *bin
+
+coverage.txt
