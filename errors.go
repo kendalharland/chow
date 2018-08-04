@@ -10,14 +10,16 @@ import (
 
 func logFatal(message string, err error, step Step) {
 	err = fmt.Errorf("%s: %v", message, err.Error())
-	panic(formatError(fatal, err, step))
+	formatted := formatError("FATAL", err, step)
+	panic(formatted)
 }
 
 func logWarning(message string, step Step) {
-	fmt.Fprint(os.Stderr, formatError(warn, errors.New(message), step))
+	formatted := formatError("WARN", errors.New(message), step)
+	fmt.Fprint(os.Stderr, formatted)
 }
 
-func formatError(level logLevel, err error, step Step) error {
+func formatError(level string, err error, step Step) error {
 	b := new(bytes.Buffer)
 	fmt.Fprintln(b)
 	fmt.Fprintf(b, "chow: %s: %v\n", level, err)

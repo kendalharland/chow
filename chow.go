@@ -56,14 +56,16 @@ type StepResult struct {
 }
 
 // Placeholder returns a unique ID that serves as a "placeholder" for a file.
+//
 // It's cumbersome to ensure that a program's various file and directory names
 // do not clash, especially when using third party libraries.  Rather than
 // creating filenames one's self, Placeholder should be used in both library and
 // application code to produce unique filenames.  The ID is converted to a path
-// automatically when passed in the Command our Outputs of a step. To read or
-// write to a placeholder directly - for example, using ioutil.WriteFile or
-// ioutil.ReadFile - you must first call PlaceholderPath to resolve the ID to
-// its underlying filepath.
+// automatically when passed in the Command or Outputs of a step.
+//
+// To read or write to a placeholder directly - for example, using
+// ioutil.WriteFile or ioutil.ReadFile - you must first call PlaceholderPath to
+// resolve the ID to its underlying filepath.
 func Placeholder(contents string) string {
 	if placeholders == nil {
 		placeholders = make(map[string]io.WriteCloser)
@@ -75,8 +77,7 @@ func Placeholder(contents string) string {
 		panic(err)
 	}
 
-	_, err = tempFile.Write([]byte(contents))
-	if err != nil {
+	if _, err = tempFile.Write([]byte(contents)); err != nil {
 		panic(err)
 	}
 
