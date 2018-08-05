@@ -13,6 +13,9 @@ A framework for writing cross-platform, testable automation scripts.
 Chow helps you write complex cross-platform build scripts to test & deploy
 software.
 
+This is a toy project in the spirit of Google Chrome Infrastucture's [recipes]
+project.
+
 ### Installation
 
 ```sh
@@ -97,3 +100,4 @@ For an more in-depth user guide, see the [Wiki]
 
 [chow-examples]: https://github.com/kharland/chow-examples
 [Wiki]: https://github.com/kharland/chow/wiki
+[recipes]: https://github.com/luci/recipes-py
