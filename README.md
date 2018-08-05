@@ -10,16 +10,8 @@ A framework for writing cross-platform, testable automation scripts.
 
 
 ## Overview
-We often need to write complex scripts that build, test & depoy software on multiple
-platforms.  Plain Python/Go scripts can be hard to maintain as they grow and more people
-join the project, and many shell environments are not supported on both Unix and Windows
-systems.
-
-Chow simplifies the process of writing and maintaining these scripts;  Chow tests generate
-"expectation" files, which contain JSON representations of the set of commands that are
-expected to execute when the script is run in production.  Expectation files should be
-checked into your source tree and compared whenever changes are made to the script.  In
-production, chow will actually execute those commands.
+Chow helps you write complex cross-platform build scripts to test & deploy
+software.
 
 ### Installation
 
@@ -51,8 +43,8 @@ func RunSteps(r chow.Runner) {
 
 ### Testing
 
-Chow tests are written like normal go tests, and can be added alongside any unit tests you
-decide to write.  We can write a basic test for the above code like so:
+Chow tests are written like normal go tests, and can be added alongside other
+unit tests.  Example:
 
 ```go
 package main
@@ -64,34 +56,40 @@ import (
 
 func TestMain(t *testing.T) {
     cfg := chow.TestConfig{Runnable: RunSteps}
+    
     t.Run("default", func(t *testing.T) {
-        cfg.Run(chow.TestCase{
-            // Command line arguments
-            Args: []string{"-foo", "bar", "-baz", "bang"},
-        })
+        cfg.Run(chow.TestCase{})
     })
 }
 ```
 
-This test produces the expectation file:
+Outputs:
 
 ```json
-{
-    "step_name": "echo hello_world",
-    "step": {
-        "command": [
-            "echo",
-            "Hello, World!"
-        ],
-        "outputs": null
-    },
-    "result": {
-        "stdout": "",
-        "stderr": "",
-        "exit_code": 0
+[
+    {
+        "step_name": "echo hello_world",
+        "step": {
+            "command": [
+                "echo",
+                "Hello, World!"
+            ],
+            "outputs": null
+        },
+        "result": {
+            "stdout": "",
+            "stderr": "",
+            "exit_code": 0
+        }
     }
-}
+]
 ```
+
+This JSON output is referred to as an *expectation*.  Expectations are normally
+written to disk and checked into your source tree.  When the code changes, they
+be should be regenerated and diffed to ensure that the set of commands exected
+by the script was modified as expected.
+
 
 For more examples see the [chow-examples] project.
 
