@@ -2,18 +2,21 @@
 package main
 
 import (
+	"flag"
+
 	"go.kendal.io/chow"
 )
 
+var name string
+
 func main() {
-	chow.Main(RunSteps)
+	flags := flag.FlagSet{}
+	flags.StringVar(&name, "name", "Anonymous", "The user to greet")
+	chow.Main(RunSteps, &flags)
 }
 
 func RunSteps(r chow.Runner) {
-	r.Run("echo hello_world", chow.Step{
-		Command: []string{"echo", "Hello, World!"},
-	})
-	r.Run("echo hello_world", chow.Step{
-		Command: []string{"echo", "Hello, Again!"},
+	r.Run("echo "+name, chow.Step{
+		Command: []string{"echo", "Hello, " + name + "!"},
 	})
 }

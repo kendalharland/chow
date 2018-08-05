@@ -39,9 +39,10 @@ func runRunnable(r Runnable, stdout io.Writer, stderr io.Writer) (err error) {
 	}
 
 	runner := &prodRunner{
-		startDir: startDir,
-		stdout:   stdout,
-		stderr:   stderr,
+		startDir:   startDir,
+		stdout:     stdout,
+		stderr:     stderr,
+		stepOutput: stdout,
 	}
 
 	// Run the program.

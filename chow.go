@@ -1,6 +1,7 @@
 package chow
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,7 +17,8 @@ import (
 //             ...
 //         })
 //     }
-func Main(r Runnable) error {
+func Main(r Runnable, f *flag.FlagSet) error {
+	f.Parse(os.Args[1:])
 	return runRunnable(r, os.Stdout, os.Stderr)
 }
 
